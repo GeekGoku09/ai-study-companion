@@ -28,23 +28,34 @@ class TestIngest(unittest.TestCase):
 
     def test_semantic_chunking(self):
         chunks = [
-            DocumentChunk(content="Para 1" * 50, metadata={"page": 1}), # approx 100-200 tokens
-            DocumentChunk(content="Para 2" * 50, metadata={"page": 1}),
-            DocumentChunk(content="Para 3" * 50, metadata={"page": 2}),
+            DocumentChunk(content="Short paragraph 1.", metadata={"page": 1}),
+            DocumentChunk(content="Short paragraph 2.", metadata={"page": 1}),
+            DocumentChunk(content="Short paragraph 3.", metadata={"page": 2}),
         ]
         
-        # Max tokens very small to force split
-        refined = semantic_chunking(chunks, max_tokens=50)
+        # Max tokens small enough to separate each short paragraph, but not sub-chunk them
+        refined = semantic_chunking(chunks, max_tokens=6)
         
-        # Each original chunk is > 50 tokens, so they should stay separate
+        # Each chunk is small enough, but combined they exceed 6 tokens, so they stay separate
         self.assertEqual(len(refined), 3)
         
         # Max tokens large to allow grouping
         refined_large = semantic_chunking(chunks, max_tokens=1000)
         # Para 1 and 2 should group (same page), Para 3 stays separate (new page)
         self.assertEqual(len(refined_large), 2)
-        self.assertIn("Para 1", refined_large[0].content)
-        self.assertIn("Para 2", refined_large[0].content)
+        self.assertIn("Short paragraph 1.", refined_large[0].content)
+        self.assertIn("Short paragraph 2.", refined_large[0].content)
+
+    def test_semantic_chunking_oversized_paragraph(self):
+        # Test sub-chunking of paragraphs larger than max_tokens
+        chunks = [
+            DocumentChunk(content="This is a long sentence with lots of words repeating. " * 30, metadata={"page": 1}),
+        ]
+        refined = semantic_chunking(chunks, max_tokens=50)
+        self.assertGreater(len(refined), 1)
+        for r in refined:
+            self.assertEqual(r.metadata["page"], 1)
+            self.assertIn("sub_chunk", r.metadata)
 
 if __name__ == '__main__':
     unittest.main()

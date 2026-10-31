@@ -46,5 +46,29 @@ class TestIngest(unittest.TestCase):
         self.assertIn("Para 1", refined_large[0].content)
         self.assertIn("Para 2", refined_large[0].content)
 
+    def test_semantic_chunking_token_accumulation(self):
+        """Verifies incremental token tracking handles exact boundaries and multi-chunk grouping."""
+        # 5 small chunks on page 1, 2 on page 2
+        chunks = [
+            DocumentChunk(content="Hello world this is a test paragraph.", metadata={"page": 1, "id": i})
+            for i in range(5)
+        ] + [
+            DocumentChunk(content="Second page content for testing chunking.", metadata={"page": 2, "id": i})
+            for i in range(2)
+        ]
+
+        # Test empty input
+        self.assertEqual(semantic_chunking([]), [])
+
+        # Large token limit allows grouping per page
+        grouped = semantic_chunking(chunks, max_tokens=1000)
+        self.assertEqual(len(grouped), 2)
+        self.assertEqual(grouped[0].metadata["page"], 1)
+        self.assertEqual(grouped[1].metadata["page"], 2)
+
+        # Extremely small limit forces every paragraph into its own chunk
+        split = semantic_chunking(chunks, max_tokens=1)
+        self.assertEqual(len(split), 7)
+
 if __name__ == '__main__':
     unittest.main()

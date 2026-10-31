@@ -1,5 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
+import tempfile
+import os
 from src.retriever import Retriever
 from src.schemas import DocumentChunk
 
@@ -11,7 +13,6 @@ class TestRetriever(unittest.TestCase):
         mock_getenv.return_value = "fake-key"
         mock_client = mock_openai.return_value
         
-        # Mock embedding response
         mock_embedding = MagicMock()
         mock_embedding.embedding = [0.1] * 1536
         mock_response = MagicMock()
@@ -25,6 +26,34 @@ class TestRetriever(unittest.TestCase):
         
         self.assertEqual(len(retriever.chunks), 1)
         mock_faiss.assert_called_once()
+
+    @patch('src.retriever.OpenAI')
+    @patch('os.getenv')
+    def test_save_and_load_index(self, mock_getenv, mock_openai):
+        mock_getenv.return_value = "fake-key"
+        mock_client = mock_openai.return_value
+
+        mock_embedding = MagicMock()
+        mock_embedding.embedding = [0.01] * 1536
+        mock_response = MagicMock()
+        mock_response.data = [mock_embedding]
+        mock_client.embeddings.create.return_value = mock_response
+
+        retriever = Retriever()
+        chunks = [DocumentChunk(content="Engineering dynamics content", metadata={"page": 1, "chunk_id": "c1"})]
+        retriever.build_index(chunks)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_path = os.path.join(tmpdir, "my_index")
+            retriever.save_index(save_path)
+            self.assertTrue(os.path.exists(f"{save_path}.faiss"))
+            self.assertTrue(os.path.exists(f"{save_path}_chunks.json"))
+
+            # Test loading into a new retriever instance
+            new_retriever = Retriever()
+            new_retriever.load_index(save_path)
+            self.assertEqual(len(new_retriever.chunks), 1)
+            self.assertEqual(new_retriever.chunks[0].content, "Engineering dynamics content")
 
 if __name__ == '__main__':
     unittest.main()

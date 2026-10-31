@@ -1,9 +1,15 @@
+import functools
 import os
 import re
 from typing import List
 from pypdf import PdfReader
 from .schemas import DocumentChunk
 import tiktoken
+
+@functools.lru_cache(maxsize=4)
+def _get_encoding(encoding_name: str = "cl100k_base"):
+    """Cached accessor for tiktoken encoding to avoid repeated initialization overhead."""
+    return tiktoken.get_encoding(encoding_name)
 
 def extract_text_from_pdf(pdf_path: str) -> List[DocumentChunk]:
     """Extracts text from a PDF and returns a list of DocumentChunks."""
@@ -42,34 +48,39 @@ def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> Lis
     Refines chunks to ensure they are semantically coherent and within token limits.
     Groups small consecutive paragraphs from the same page if they fit in max_tokens.
     """
-    encoding = tiktoken.get_encoding("cl100k_base")
-    refined_chunks = []
-    
     if not chunks:
         return []
 
+    encoding = _get_encoding("cl100k_base")
+    delimiter_tokens = len(encoding.encode("\n\n"))
+    refined_chunks = []
+
     current_chunk_content = ""
+    current_tokens = 0
     current_metadata = chunks[0].metadata
     
+    # Bolt Optimization: Avoid quadratic O(N^2) tokenization overhead by incrementally
+    # tracking token count rather than re-encoding the concatenated string on each iteration.
     for chunk in chunks:
-        # If adding the next paragraph exceeds max_tokens or we are on a new page, 
-        # save the current chunk and start a new one
-        tokens_current = len(encoding.encode(current_chunk_content))
         tokens_new = len(encoding.encode(chunk.content))
+        additional_tokens = (delimiter_tokens + tokens_new) if current_chunk_content else tokens_new
         
-        if (tokens_current + tokens_new > max_tokens) or (chunk.metadata["page"] != current_metadata["page"]):
+        if (current_tokens + additional_tokens > max_tokens) or (chunk.metadata["page"] != current_metadata["page"]):
             if current_chunk_content:
                 refined_chunks.append(DocumentChunk(
                     content=current_chunk_content.strip(),
                     metadata=current_metadata
                 ))
             current_chunk_content = chunk.content
+            current_tokens = tokens_new
             current_metadata = chunk.metadata
         else:
             if current_chunk_content:
                 current_chunk_content += "\n\n" + chunk.content
+                current_tokens += additional_tokens
             else:
                 current_chunk_content = chunk.content
+                current_tokens = tokens_new
                 current_metadata = chunk.metadata
                 
     # Add the last chunk

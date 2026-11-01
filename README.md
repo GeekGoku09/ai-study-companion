@@ -12,12 +12,6 @@ Engineering students often face "information overload" when reviewing dense text
 - **Data Source**: Assumes high-quality, text-searchable engineering PDFs.
 - **Grounding**: All generated content must be strictly grounded in the uploaded documents to ensure technical accuracy.
 
-## Proposed Solution
-A modular RAG pipeline that:
-1. **Ingests** PDFs and performs semantic chunking.
-2. **Retrieves** relevant context using vector embeddings (FAISS).
-3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates.
-
 ## System Architecture
 
 ```mermaid
@@ -38,17 +32,6 @@ graph TD
     L --> M[Structured Output]
 ```
 
-## Ideal End State
-A production-ready CLI tool where a student can upload their semester notes and receive a comprehensive, grounded study kit in seconds, significantly reducing revision time and improving exam performance.
-
-## Hackathon Scope & Execution
-- **Core Focus**: Robust RAG implementation with semantic chunking and structured Pydantic outputs.
-- **Modules**:
-    - `ingest.py`: PDF parsing and intelligent grouping of paragraphs.
-    - `retriever.py`: Vector search using FAISS and OpenAI embeddings.
-    - `llm.py`: Centralized chat completion with structured parsing.
-- **Testing**: Unit tests for structural integrity of the pipeline.
-
 ## How to Run / Demo
 
 ### 1. Installation
@@ -57,33 +40,60 @@ pip install -r requirements.txt
 ```
 
 ### 2. Set Environment Variables
-Create a `.env` file or export your OpenAI API key:
+Copy `.env.example` to `.env` or export your OpenAI API key:
 ```bash
+cp .env.example .env
+# Edit .env and set your OPENAI_API_KEY
+# or:
 export OPENAI_API_KEY="your-api-key-here"
 ```
 
-### 3. Usage
-Run the CLI for different modes:
+### 3. Usage & CLI Options
+
+The CLI supports three primary modes: `summary`, `mcq`, and `plan`.
 
 **Topic-wise Summary:**
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode summary
+python -m src.main --pdf path/to/notes.pdf --mode summary --output summary.md
 ```
 
 **Exam-style MCQs:**
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
+python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10 --output mcqs.json
 ```
 
 **7-Day Revision Plan:**
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode plan
+python -m src.main --pdf path/to/notes.pdf --mode plan --output revision_plan.md
 ```
 
-### 4. Running Tests
+#### Vector Index Persistence & Caching
+To save processing time and API embedding costs on subsequent runs, you can persist and reload FAISS vector indices:
+
+**Build and Save Index:**
 ```bash
-export PYTHONPATH=$PYTHONPATH:.
-pytest
+python -m src.main --pdf path/to/notes.pdf --mode summary --save-index ./indexes/my_course
+```
+
+**Load from Pre-built Index (no PDF reprocessing needed):**
+```bash
+python -m src.main --load-index ./indexes/my_course --mode mcq --num-mcq 5
+```
+
+### 4. CLI Arguments Reference
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `--pdf` | `str` | `None` | Path to the engineering PDF file (required if not loading index) |
+| `--mode` | `choice` | `required` | Operation mode: `summary`, `mcq`, or `plan` |
+| `--num-mcq` | `int` | `5` | Number of MCQs to generate (for `mcq` mode) |
+| `--save-index` | `str` | `None` | Directory to save the built FAISS index and metadata |
+| `--load-index` | `str` | `None` | Directory to load a pre-built FAISS index from |
+| `--output` | `str` | `None` | Path to write output (`.json` for JSON, `.md`/other for Markdown) |
+| `--model` | `str` | `gpt-4o-mini` | OpenAI chat completion model |
+
+### 5. Running Tests
+```bash
+python3 -m pytest
 ```
 
 ## Notes on AI Usage

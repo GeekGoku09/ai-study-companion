@@ -18,6 +18,7 @@ class TestIngest(unittest.TestCase):
         )
         
         mock_reader_instance = mock_pdf_reader.return_value
+        mock_reader_instance.is_encrypted = False
         mock_reader_instance.pages = [mock_page]
         
         chunks = extract_text_from_pdf("dummy.pdf")
@@ -26,25 +27,53 @@ class TestIngest(unittest.TestCase):
         self.assertIn("long test paragraph", chunks[0].content)
         self.assertIn("another long paragraph", chunks[1].content)
 
+    @patch('os.path.exists')
+    def test_extract_text_file_not_found(self, mock_exists):
+        mock_exists.return_value = False
+        with self.assertRaises(FileNotFoundError):
+            extract_text_from_pdf("nonexistent.pdf")
+
+    @patch('src.ingest.PdfReader')
+    @patch('os.path.exists')
+    def test_extract_text_encrypted_pdf(self, mock_exists, mock_pdf_reader):
+        mock_exists.return_value = True
+        mock_reader_instance = mock_pdf_reader.return_value
+        mock_reader_instance.is_encrypted = True
+        mock_reader_instance.decrypt.return_value = 0 # Decryption failed
+
+        with self.assertRaises(ValueError) as ctx:
+            extract_text_from_pdf("locked.pdf")
+        self.assertIn("encrypted", str(ctx.exception).lower())
+
     def test_semantic_chunking(self):
+        # Each chunk is ~30 tokens (less than max_tokens=100)
         chunks = [
-            DocumentChunk(content="Para 1" * 50, metadata={"page": 1}), # approx 100-200 tokens
-            DocumentChunk(content="Para 2" * 50, metadata={"page": 1}),
-            DocumentChunk(content="Para 3" * 50, metadata={"page": 2}),
+            DocumentChunk(content="Paragraph 1 with concise technical content. " * 3, metadata={"page": 1}),
+            DocumentChunk(content="Paragraph 2 with concise technical content. " * 3, metadata={"page": 1}),
+            DocumentChunk(content="Paragraph 3 with concise technical content. " * 3, metadata={"page": 2}),
         ]
         
-        # Max tokens very small to force split
-        refined = semantic_chunking(chunks, max_tokens=50)
-        
-        # Each original chunk is > 50 tokens, so they should stay separate
+        # Max tokens 40 forces them to stay separate (each is ~30 tokens, 30+30 > 40)
+        refined = semantic_chunking(chunks, max_tokens=40)
         self.assertEqual(len(refined), 3)
         
-        # Max tokens large to allow grouping
+        # Max tokens large (1000) allows grouping on same page
         refined_large = semantic_chunking(chunks, max_tokens=1000)
-        # Para 1 and 2 should group (same page), Para 3 stays separate (new page)
         self.assertEqual(len(refined_large), 2)
-        self.assertIn("Para 1", refined_large[0].content)
-        self.assertIn("Para 2", refined_large[0].content)
+        self.assertIn("Paragraph 1", refined_large[0].content)
+        self.assertIn("Paragraph 2", refined_large[0].content)
+
+    def test_semantic_chunking_oversized_paragraph(self):
+        huge_text = "Detailed engineering concept explanation. " * 200
+        oversized_chunk = DocumentChunk(content=huge_text, metadata={"page": 1, "chunk_id": "p1_c0"})
+
+        refined = semantic_chunking([oversized_chunk], max_tokens=100)
+        self.assertGreater(len(refined), 1)
+        for chunk in refined:
+            self.assertEqual(chunk.metadata["page"], 1)
+
+    def test_empty_chunks(self):
+        self.assertEqual(semantic_chunking([]), [])
 
 if __name__ == '__main__':
     unittest.main()

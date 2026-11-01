@@ -8,10 +8,15 @@ class MCQGenerator:
 
     def generate_mcqs(self, chunks: List[DocumentChunk], num_questions: int = 5) -> MCQList:
         """Generates MCQs from a list of document chunks."""
-        if not chunks:
+        if not chunks or num_questions <= 0:
             return MCQList(questions=[])
 
-        context = "\n\n".join([f"Content: {c.content}" for c in chunks])
+        context_blocks = []
+        for c in chunks:
+            page = c.metadata.get("page", "Unknown")
+            context_blocks.append(f"[Page {page}]\n{c.content}")
+
+        context = "\n\n".join(context_blocks)
         system_prompt, user_prompt = self.llm_service.get_mcq_prompt(context, num_questions)
         
         mcq_list = self.llm_service.call_structured(

@@ -11,7 +11,12 @@ class Summarizer:
         if not chunks:
             return SummaryResponse(topics=[])
 
-        context = "\n\n".join([f"Source: {c.metadata.get('page')}\nContent: {c.content}" for c in chunks])
+        context_blocks = []
+        for c in chunks:
+            page = c.metadata.get("page", "Unknown")
+            context_blocks.append(f"[Page {page}]\n{c.content}")
+
+        context = "\n\n".join(context_blocks)
         system_prompt, user_prompt = self.llm_service.get_summarization_prompt(context)
         
         summary_response = self.llm_service.call_structured(

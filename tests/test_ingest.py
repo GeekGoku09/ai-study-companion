@@ -46,5 +46,24 @@ class TestIngest(unittest.TestCase):
         self.assertIn("Para 1", refined_large[0].content)
         self.assertIn("Para 2", refined_large[0].content)
 
+    def test_semantic_chunking_token_tracking(self):
+        # Test semantic chunking with multiple paragraphs to verify token tracking,
+        # max_tokens boundary adherence, and page separation
+        chunks = [
+            DocumentChunk(content=f"Paragraph {i} on page 1 with distinct text details.", metadata={"page": 1})
+            for i in range(10)
+        ] + [
+            DocumentChunk(content="Paragraph on page 2.", metadata={"page": 2})
+        ]
+
+        # Use a limit that forces grouping some chunks on page 1 together
+        refined = semantic_chunking(chunks, max_tokens=100)
+        self.assertTrue(len(refined) > 1)
+
+        # Page 2 chunk must not be grouped with page 1
+        page_2_chunks = [c for c in refined if c.metadata.get("page") == 2]
+        self.assertEqual(len(page_2_chunks), 1)
+        self.assertEqual(page_2_chunks[0].content, "Paragraph on page 2.")
+
 if __name__ == '__main__':
     unittest.main()

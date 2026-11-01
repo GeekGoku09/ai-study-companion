@@ -1,44 +1,87 @@
 import os
-import json
-from typing import Type, TypeVar, List, Tuple
+import time
+from typing import Type, TypeVar, List, Tuple, Optional
 from pydantic import BaseModel
-from openai import OpenAI
-from .schemas import DocumentChunk
+from openai import OpenAI, OpenAIError, RateLimitError, APIConnectionError
 
 T = TypeVar("T", bound=BaseModel)
 
 class LLMService:
-    def __init__(self, api_key: str = None, model: str = "gpt-4o-mini"):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "gpt-4o-mini",
+        timeout: float = 60.0,
+        max_retries: int = 3,
+        temperature: float = 0.2
+    ):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OpenAI API key is required for LLMService")
         
-        self.client = OpenAI(api_key=self.api_key)
+        self.client = OpenAI(api_key=self.api_key, timeout=timeout)
         self.model = model
+        self.timeout = timeout
+        self.max_retries = max(1, max_retries)
+        self.temperature = temperature
 
     def call_structured(self, system_prompt: str, user_prompt: str, response_model: Type[T]) -> T:
-        """Calls the LLM and returns a structured response matching the Pydantic model."""
-        response = self.client.beta.chat.completions.parse(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format=response_model,
-        )
-        return response.choices[0].message.parsed
+        """
+        Calls the LLM with structured outputs and exponential backoff retry on transient errors.
+        """
+        last_error = None
+        for attempt in range(self.max_retries):
+            try:
+                response = self.client.beta.chat.completions.parse(
+                    model=self.model,
+                    temperature=self.temperature,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format=response_model,
+                )
+                parsed = response.choices[0].message.parsed
+                if parsed is None:
+                    raise ValueError("Model returned refusal or failed to parse structured output.")
+                return parsed
+            except (RateLimitError, APIConnectionError) as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    sleep_time = 2 ** attempt
+                    time.sleep(sleep_time)
+                else:
+                    raise RuntimeError(f"OpenAI API call failed after {self.max_retries} attempts: {e}") from e
+            except OpenAIError as e:
+                raise RuntimeError(f"OpenAI API error: {e}") from e
+            except Exception as e:
+                raise RuntimeError(f"Unexpected error during structured completion: {e}") from e
+
+        raise RuntimeError(f"Failed to generate structured response: {last_error}")
 
     def get_summarization_prompt(self, context: str) -> Tuple[str, str]:
-        system = "You are a technical academic assistant. Summarize the provided engineering document chunks into topic-wise sections. Focus on key concepts, formulas, and definitions. Ground your summary strictly in the provided context."
+        system = (
+            "You are a technical academic assistant. Summarize the provided engineering document chunks "
+            "into topic-wise sections. Focus on key concepts, formulas, and definitions. Ground your summary "
+            "strictly in the provided context."
+        )
         user = f"Context:\n{context}\n\nGenerate a topic-wise summary."
         return system, user
 
     def get_mcq_prompt(self, context: str, num_questions: int = 5) -> Tuple[str, str]:
-        system = "You are an examiner. Generate high-quality, exam-style MCQs based on the provided engineering content. Focus on conceptual understanding, not trivial details. Each MCQ must have 4 options, a correct answer, and a brief explanation."
+        system = (
+            "You are an examiner. Generate high-quality, exam-style MCQs based on the provided engineering "
+            "content. Focus on conceptual understanding, not trivial details. Each MCQ must have exactly 4 "
+            "options, a correct answer matching one of the options, and a brief explanation."
+        )
         user = f"Context:\n{context}\n\nGenerate {num_questions} MCQs."
         return system, user
 
     def get_planner_prompt(self, topics: List[str]) -> Tuple[str, str]:
-        system = "You are a study coach. Create a realistic 7-day revision plan for an engineering student based on the list of topics extracted from their notes. The plan should be time-boxed and include specific activities like 'Review formulas', 'Solve practice problems', or 'Deep dive into theory'."
+        system = (
+            "You are a study coach. Create a realistic 7-day revision plan for an engineering student "
+            "based on the list of topics extracted from their notes. The plan should be time-boxed and include "
+            "specific activities like 'Review formulas', 'Solve practice problems', or 'Deep dive into theory'."
+        )
         user = f"Topics:\n{', '.join(topics)}\n\nGenerate a 7-day revision plan."
         return system, user

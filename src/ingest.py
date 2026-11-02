@@ -1,20 +1,36 @@
+import logging
 import os
 import re
 from typing import List
 from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 from .schemas import DocumentChunk
 import tiktoken
+
+logger = logging.getLogger(__name__)
 
 def extract_text_from_pdf(pdf_path: str) -> List[DocumentChunk]:
     """Extracts text from a PDF and returns a list of DocumentChunks."""
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"PDF file not found at {pdf_path}")
 
-    reader = PdfReader(pdf_path)
+    try:
+        reader = PdfReader(pdf_path)
+    except Exception as e:
+        raise PdfReadError(f"Failed to read PDF file at {pdf_path}: {e}")
+
+    if reader.is_encrypted:
+        raise ValueError(f"Encrypted PDF files are not supported: {pdf_path}")
+
     chunks = []
     
     for page_num, page in enumerate(reader.pages):
-        text = page.extract_text()
+        try:
+            text = page.extract_text()
+        except Exception as e:
+            logger.warning(f"Failed to extract text from page {page_num + 1} of {pdf_path}: {e}")
+            continue
+
         if not text:
             continue
         
@@ -35,6 +51,9 @@ def extract_text_from_pdf(pdf_path: str) -> List[DocumentChunk]:
                 }
             ))
     
+    if not chunks:
+        logger.warning(f"No text content could be extracted from {pdf_path}.")
+
     return chunks
 
 def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> List[DocumentChunk]:
@@ -63,7 +82,7 @@ def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> Lis
         
         # If adding the next paragraph exceeds max_tokens or we are on a new page,
         # save the current chunk and start a new one
-        if (current_tokens + tokens_new > max_tokens) or (chunk.metadata["page"] != current_metadata["page"]):
+        if (current_tokens + tokens_new > max_tokens) or (chunk.metadata.get("page") != current_metadata.get("page")):
             if current_parts:
                 refined_chunks.append(DocumentChunk(
                     content="\n\n".join(current_parts).strip(),
@@ -88,5 +107,7 @@ def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> Lis
 def ingest_pdf(pdf_path: str) -> List[DocumentChunk]:
     """High-level function to ingest a PDF and return semantically chunked content."""
     initial_chunks = extract_text_from_pdf(pdf_path)
+    if not initial_chunks:
+        raise ValueError(f"No extractable text found in PDF: {pdf_path}")
     final_chunks = semantic_chunking(initial_chunks)
     return final_chunks

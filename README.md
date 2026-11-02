@@ -15,8 +15,8 @@ Engineering students often face "information overload" when reviewing dense text
 ## Proposed Solution
 A modular RAG pipeline that:
 1. **Ingests** PDFs and performs semantic chunking.
-2. **Retrieves** relevant context using vector embeddings (FAISS).
-3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates.
+2. **Retrieves** relevant context using vector embeddings (FAISS) with chunk persistence and batched embeddings.
+3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates, transient error retry, and structured Pydantic schema validation.
 
 ## System Architecture
 
@@ -35,19 +35,8 @@ graph TD
     H & I & J --> K[LLM Service: llm.py]
     K --> L[OpenAI GPT-4o-mini]
     E -.->|Retrieve Context| H & I & J
-    L --> M[Structured Output]
+    L --> M[Structured Output / Markdown / JSON]
 ```
-
-## Ideal End State
-A production-ready CLI tool where a student can upload their semester notes and receive a comprehensive, grounded study kit in seconds, significantly reducing revision time and improving exam performance.
-
-## Hackathon Scope & Execution
-- **Core Focus**: Robust RAG implementation with semantic chunking and structured Pydantic outputs.
-- **Modules**:
-    - `ingest.py`: PDF parsing and intelligent grouping of paragraphs.
-    - `retriever.py`: Vector search using FAISS and OpenAI embeddings.
-    - `llm.py`: Centralized chat completion with structured parsing.
-- **Testing**: Unit tests for structural integrity of the pipeline.
 
 ## How to Run / Demo
 
@@ -57,33 +46,52 @@ pip install -r requirements.txt
 ```
 
 ### 2. Set Environment Variables
-Create a `.env` file or export your OpenAI API key:
+Copy `.env.example` to `.env` or export your OpenAI API key:
 ```bash
+cp .env.example .env
 export OPENAI_API_KEY="your-api-key-here"
 ```
 
-### 3. Usage
-Run the CLI for different modes:
+### 3. Usage & CLI Options
 
-**Topic-wise Summary:**
+The CLI supports the following arguments:
+- `--pdf`: Path to the engineering PDF file.
+- `--mode`: Operation mode: `summary`, `mcq`, or `plan`.
+- `--num-mcq`: Number of MCQs to generate (default: 5).
+- `--output`: Path to write the output (`.md` for Markdown, `.json` for JSON).
+- `--save-index`: Directory to persist the FAISS index and chunk metadata for fast reuse.
+- `--load-index`: Directory to load a pre-computed FAISS index and metadata (skips PDF re-parsing and embedding generation).
+- `--verbose`: Enable detailed debug logging.
+
+#### Topic-wise Summary
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode summary
+python -m src.main --pdf path/to/notes.pdf --mode summary --output summary.md
 ```
 
-**Exam-style MCQs:**
+#### Exam-style MCQs
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
+python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10 --output mcqs.json
 ```
 
-**7-Day Revision Plan:**
+#### 7-Day Revision Plan
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode plan
+python -m src.main --pdf path/to/notes.pdf --mode plan --output revision_plan.md
+```
+
+#### Saving & Reusing Vector Indices
+Save index to avoid re-embedding:
+```bash
+python -m src.main --pdf path/to/notes.pdf --mode summary --save-index ./my_index
+```
+
+Query later directly using the pre-computed index without uploading/parsing the PDF again:
+```bash
+python -m src.main --load-index ./my_index --mode mcq --num-mcq 5
 ```
 
 ### 4. Running Tests
 ```bash
-export PYTHONPATH=$PYTHONPATH:.
-pytest
+python3 -m pytest
 ```
 
 ## Notes on AI Usage

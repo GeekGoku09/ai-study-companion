@@ -1,7 +1,9 @@
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 from src.ingest import extract_text_from_pdf, semantic_chunking, ingest_pdf
 from src.schemas import DocumentChunk
+from pypdf.errors import PdfReadError
 
 class TestIngest(unittest.TestCase):
     @patch('src.ingest.PdfReader')
@@ -18,6 +20,7 @@ class TestIngest(unittest.TestCase):
         )
         
         mock_reader_instance = mock_pdf_reader.return_value
+        mock_reader_instance.is_encrypted = False
         mock_reader_instance.pages = [mock_page]
         
         chunks = extract_text_from_pdf("dummy.pdf")
@@ -25,6 +28,26 @@ class TestIngest(unittest.TestCase):
         self.assertEqual(len(chunks), 2)
         self.assertIn("long test paragraph", chunks[0].content)
         self.assertIn("another long paragraph", chunks[1].content)
+
+    @patch('src.ingest.PdfReader')
+    @patch('os.path.exists')
+    def test_encrypted_pdf_raises(self, mock_exists, mock_pdf_reader):
+        mock_exists.return_value = True
+        mock_reader_instance = mock_pdf_reader.return_value
+        mock_reader_instance.is_encrypted = True
+
+        with self.assertRaises(ValueError):
+            extract_text_from_pdf("encrypted.pdf")
+
+    @patch('os.path.exists', return_value=False)
+    def test_missing_pdf_raises(self, mock_exists):
+        with self.assertRaises(FileNotFoundError):
+            extract_text_from_pdf("nonexistent.pdf")
+
+    @patch('src.ingest.extract_text_from_pdf', return_value=[])
+    def test_ingest_empty_raises(self, mock_extract):
+        with self.assertRaises(ValueError):
+            ingest_pdf("empty.pdf")
 
     def test_semantic_chunking(self):
         chunks = [

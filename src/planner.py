@@ -1,6 +1,9 @@
+import logging
 from typing import List
 from .schemas import RevisionPlan
 from .llm import LLMService
+
+logger = logging.getLogger(__name__)
 
 class RevisionPlanner:
     def __init__(self, llm_service: LLMService):
@@ -9,9 +12,14 @@ class RevisionPlanner:
     def generate_plan(self, topics: List[str]) -> RevisionPlan:
         """Generates a 7-day revision plan based on a list of topics."""
         if not topics:
+            logger.info("No topics provided to RevisionPlanner, returning empty revision plan.")
             return RevisionPlan(plan=[])
 
-        system_prompt, user_prompt = self.llm_service.get_planner_prompt(topics)
+        cleaned_topics = [t.strip() for t in topics if t and t.strip()]
+        if not cleaned_topics:
+            return RevisionPlan(plan=[])
+
+        system_prompt, user_prompt = self.llm_service.get_planner_prompt(cleaned_topics)
         
         revision_plan = self.llm_service.call_structured(
             system_prompt=system_prompt,

@@ -1,13 +1,14 @@
 import unittest
+import tempfile
 from unittest.mock import MagicMock, patch
 from src.ingest import extract_text_from_pdf, semantic_chunking, ingest_pdf
 from src.schemas import DocumentChunk
 
 class TestIngest(unittest.TestCase):
     @patch('src.ingest.PdfReader')
-    @patch('os.path.exists')
-    def test_extract_text_from_pdf(self, mock_exists, mock_pdf_reader):
-        mock_exists.return_value = True
+    @patch('src.ingest.validate_pdf_path')
+    def test_extract_text_from_pdf(self, mock_validate, mock_pdf_reader):
+        mock_validate.return_value = "dummy.pdf"
         
         # Mock PDF page
         mock_page = MagicMock()
@@ -19,12 +20,37 @@ class TestIngest(unittest.TestCase):
         
         mock_reader_instance = mock_pdf_reader.return_value
         mock_reader_instance.pages = [mock_page]
+        mock_reader_instance.is_encrypted = False
         
         chunks = extract_text_from_pdf("dummy.pdf")
         
         self.assertEqual(len(chunks), 2)
         self.assertIn("long test paragraph", chunks[0].content)
         self.assertIn("another long paragraph", chunks[1].content)
+
+    @patch('src.ingest.PdfReader')
+    @patch('src.ingest.validate_pdf_path')
+    def test_extract_text_empty_pdf(self, mock_validate, mock_pdf_reader):
+        mock_validate.return_value = "dummy.pdf"
+        mock_reader_instance = mock_pdf_reader.return_value
+        mock_reader_instance.pages = []
+        mock_reader_instance.is_encrypted = False
+
+        with self.assertRaises(ValueError):
+            extract_text_from_pdf("dummy.pdf")
+
+    @patch('src.ingest.PdfReader')
+    @patch('src.ingest.validate_pdf_path')
+    def test_extract_text_no_text_extracted(self, mock_validate, mock_pdf_reader):
+        mock_validate.return_value = "dummy.pdf"
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = ""
+        mock_reader_instance = mock_pdf_reader.return_value
+        mock_reader_instance.pages = [mock_page]
+        mock_reader_instance.is_encrypted = False
+
+        with self.assertRaises(ValueError):
+            extract_text_from_pdf("dummy.pdf")
 
     def test_semantic_chunking(self):
         chunks = [
@@ -45,6 +71,9 @@ class TestIngest(unittest.TestCase):
         self.assertEqual(len(refined_large), 2)
         self.assertIn("Para 1", refined_large[0].content)
         self.assertIn("Para 2", refined_large[0].content)
+
+    def test_semantic_chunking_empty(self):
+        self.assertEqual(semantic_chunking([]), [])
 
 if __name__ == '__main__':
     unittest.main()

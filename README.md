@@ -1,22 +1,17 @@
 # AI Study Companion RAG System
 
-An intelligent Retrieval-Augmented Generation (RAG) system designed to transform engineering PDFs into actionable study materials, including topic-wise summaries, exam-style MCQs, and structured revision plans.
+An intelligent, production-ready Retrieval-Augmented Generation (RAG) system engineered to transform complex engineering PDFs into actionable study materials: topic-wise summaries, exam-style MCQs, and structured 7-day revision plans.
 
-## Problem
-Engineering students often face "information overload" when reviewing dense textbooks and lecture notes. Manually creating summaries and practice questions is time-consuming, and general-purpose AI often "hallucinates" details not present in the specific course material.
+---
 
-## Constraints & Assumptions
-- **No Jupyter Notebooks**: Logic is strictly contained in modular `.py` files for production readiness.
-- **Code-First Evaluation**: Focus on clean architecture, readable logic, and testability.
-- **Privacy & Security**: No secrets committed; API keys managed via environment variables.
-- **Data Source**: Assumes high-quality, text-searchable engineering PDFs.
-- **Grounding**: All generated content must be strictly grounded in the uploaded documents to ensure technical accuracy.
+## Key Features
 
-## Proposed Solution
-A modular RAG pipeline that:
-1. **Ingests** PDFs and performs semantic chunking.
-2. **Retrieves** relevant context using vector embeddings (FAISS).
-3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates.
+- **Semantic Document Ingestion**: Robust PDF extraction with page-boundary tracking, noise filtering, and O(N) token-budgeted semantic chunking.
+- **Persistent Vector Store**: High-performance similarity search using FAISS and OpenAI `text-embedding-3-small`, complete with batching and local serialization (`save_index` / `load_index`).
+- **Resilient Structured Generation**: Centralized LLM orchestration (`gpt-4o-mini`) using Pydantic structured schemas, retry logic with exponential backoff, and configurable timeouts.
+- **Multiple Output Formats**: Direct stdout terminal display, as well as structured JSON and Markdown export options (`--output`).
+
+---
 
 ## System Architecture
 
@@ -36,55 +31,101 @@ graph TD
     K --> L[OpenAI GPT-4o-mini]
     E -.->|Retrieve Context| H & I & J
     L --> M[Structured Output]
+    M --> N[Terminal Display / JSON / Markdown]
 ```
 
-## Ideal End State
-A production-ready CLI tool where a student can upload their semester notes and receive a comprehensive, grounded study kit in seconds, significantly reducing revision time and improving exam performance.
+---
 
-## Hackathon Scope & Execution
-- **Core Focus**: Robust RAG implementation with semantic chunking and structured Pydantic outputs.
-- **Modules**:
-    - `ingest.py`: PDF parsing and intelligent grouping of paragraphs.
-    - `retriever.py`: Vector search using FAISS and OpenAI embeddings.
-    - `llm.py`: Centralized chat completion with structured parsing.
-- **Testing**: Unit tests for structural integrity of the pipeline.
+## Installation & Setup
 
-## How to Run / Demo
+### 1. Prerequisites
+- Python 3.12+
+- OpenAI API Key
 
-### 1. Installation
+### 2. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Set Environment Variables
-Create a `.env` file or export your OpenAI API key:
+### 3. Configure Environment Variables
+Copy `.env.example` to `.env` and set your OpenAI API key:
+```bash
+cp .env.example .env
+```
+Or export it directly:
 ```bash
 export OPENAI_API_KEY="your-api-key-here"
 ```
 
-### 3. Usage
-Run the CLI for different modes:
+---
 
-**Topic-wise Summary:**
+## CLI Usage
+
+Run the CLI via `python3 -m src.main` with desired mode and arguments:
+
+### 1. Topic-Wise Summary
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode summary
+python3 -m src.main --pdf path/to/notes.pdf --mode summary --output summary.md
 ```
 
-**Exam-style MCQs:**
+### 2. Exam-Style Multiple Choice Questions (MCQs)
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
+python3 -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10 --output mcqs.json
 ```
 
-**7-Day Revision Plan:**
+### 3. 7-Day Structured Revision Plan
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode plan
+python3 -m src.main --pdf path/to/notes.pdf --mode plan --output plan.md
 ```
 
-### 4. Running Tests
+### 4. Index Persistence (Save & Load)
+Save embeddings and index to disk to avoid repeated embedding costs:
 ```bash
-export PYTHONPATH=$PYTHONPATH:.
-pytest
+# Ingest and save index
+python3 -m src.main --pdf path/to/notes.pdf --mode summary --save-index ./vector_store
+
+# Query against previously saved index (no PDF re-parsing or re-embedding needed)
+python3 -m src.main --load-index ./vector_store --mode mcq --num-mcq 5
 ```
 
-## Notes on AI Usage
-This project was developed with AI assistance (Jules), following a technical-first approach to architecture and logic. For a detailed breakdown of AI vs. human-guided components, see [AI.md](./AI.md).
+### CLI Options
+| Flag | Type | Description |
+|---|---|---|
+| `--pdf` | `str` | Path to engineering PDF file (required unless `--load-index` is used) |
+| `--mode` | `summary\|mcq\|plan` | Generation mode: `summary`, `mcq`, or `plan` |
+| `--num-mcq` | `int` | Number of MCQs to generate (default: 5) |
+| `--save-index` | `str` | Directory path to persist FAISS index and chunk metadata |
+| `--load-index` | `str` | Directory path to load saved FAISS index and chunk metadata |
+| `--output` | `str` | File path (`.json` or `.md`) to save generated output |
+| `--verbose` | `flag` | Enable detailed debug logs |
+
+---
+
+## Running Tests
+
+Execute the comprehensive test suite with `pytest`:
+```bash
+python3 -m pytest
+```
+
+---
+
+## Project Structure
+
+```
+├── src/
+│   ├── ingest.py         # PDF parsing, validation, and semantic chunking
+│   ├── llm.py            # Centralized LLM client, retries, and structured prompts
+│   ├── main.py           # CLI entry point and orchestration
+│   ├── mcq_generator.py  # MCQ generation logic
+│   ├── planner.py        # 7-day revision schedule generation
+│   ├── retriever.py      # FAISS vector store and batched OpenAI embeddings
+│   ├── schemas.py        # Pydantic schemas and data validation models
+│   ├── summarizer.py     # Topic summarization logic
+│   └── utils.py          # Token counting, file validation, and format export
+├── tests/                # 30 unit and integration tests across all components
+├── .env.example          # Environment variable template
+├── AI.md                 # AI usage disclosure
+├── requirements.txt      # Dependencies
+└── README.md             # Documentation
+```

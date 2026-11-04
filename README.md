@@ -1,24 +1,15 @@
 # AI Study Companion RAG System
 
-An intelligent Retrieval-Augmented Generation (RAG) system designed to transform engineering PDFs into actionable study materials, including topic-wise summaries, exam-style MCQs, and structured revision plans.
+An intelligent Retrieval-Augmented Generation (RAG) system designed to transform dense engineering PDFs into actionable study materials: topic-wise summaries, exam-style Multiple Choice Questions (MCQs), and structured revision plans.
 
-## Problem
-Engineering students often face "information overload" when reviewing dense textbooks and lecture notes. Manually creating summaries and practice questions is time-consuming, and general-purpose AI often "hallucinates" details not present in the specific course material.
+---
 
-## Constraints & Assumptions
-- **No Jupyter Notebooks**: Logic is strictly contained in modular `.py` files for production readiness.
-- **Code-First Evaluation**: Focus on clean architecture, readable logic, and testability.
-- **Privacy & Security**: No secrets committed; API keys managed via environment variables.
-- **Data Source**: Assumes high-quality, text-searchable engineering PDFs.
-- **Grounding**: All generated content must be strictly grounded in the uploaded documents to ensure technical accuracy.
-
-## Proposed Solution
-A modular RAG pipeline that:
-1. **Ingests** PDFs and performs semantic chunking.
-2. **Retrieves** relevant context using vector embeddings (FAISS).
-3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates.
-
-## System Architecture
+## Key Features & Architecture
+- **Semantic & Resilient Chunking**: Paragraph-aware token chunking with O(N) single-pass tokenization and automatic sentence sub-splitting for oversized blocks.
+- **FAISS Vector Search with Persistence**: Indexing with OpenAI embeddings (`text-embedding-3-small`), batching support, and `--save-index` / `--load-index` capabilities for zero re-computation on repeated runs.
+- **Structured Pydantic Validation**: Guarantees typed, valid schemas for topics, MCQs, and revision plans with strict model validation.
+- **Production Resilience**: Exponential backoff retry handler for OpenAI rate limits and network transient errors, prompt injection isolation delimiters (`<<DOCUMENT_CONTEXT>>`), and clean CLI exit codes.
+- **Flexible Export**: Direct terminal display and export to formatted Markdown (`.md`) or structured JSON (`.json`) with `--output`.
 
 ```mermaid
 graph TD
@@ -35,56 +26,106 @@ graph TD
     H & I & J --> K[LLM Service: llm.py]
     K --> L[OpenAI GPT-4o-mini]
     E -.->|Retrieve Context| H & I & J
-    L --> M[Structured Output]
+    L --> M[Structured Output / Export]
 ```
 
-## Ideal End State
-A production-ready CLI tool where a student can upload their semester notes and receive a comprehensive, grounded study kit in seconds, significantly reducing revision time and improving exam performance.
+---
 
-## Hackathon Scope & Execution
-- **Core Focus**: Robust RAG implementation with semantic chunking and structured Pydantic outputs.
-- **Modules**:
-    - `ingest.py`: PDF parsing and intelligent grouping of paragraphs.
-    - `retriever.py`: Vector search using FAISS and OpenAI embeddings.
-    - `llm.py`: Centralized chat completion with structured parsing.
-- **Testing**: Unit tests for structural integrity of the pipeline.
+## Installation & Setup
 
-## How to Run / Demo
+### 1. Requirements
+- Python 3.10+ (tested on Python 3.12)
+- OpenAI API Key
 
-### 1. Installation
+### 2. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Set Environment Variables
-Create a `.env` file or export your OpenAI API key:
+### 3. Environment Variables
+Copy the example environment configuration:
+```bash
+cp .env.example .env
+```
+And populate your API key:
 ```bash
 export OPENAI_API_KEY="your-api-key-here"
 ```
 
-### 3. Usage
-Run the CLI for different modes:
+Optional configurations:
+- `OPENAI_MODEL`: Chat model (default: `gpt-4o-mini`)
+- `OPENAI_EMBEDDING_MODEL`: Embedding model (default: `text-embedding-3-small`)
 
-**Topic-wise Summary:**
+---
+
+## CLI Usage
+
+### Basic Usage
+The CLI entrypoint is `src.main`. You can run three modes: `summary`, `mcq`, or `plan`.
+
+#### 1. Topic-wise Summary
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode summary
+python3 -m src.main --pdf path/to/notes.pdf --mode summary
 ```
 
-**Exam-style MCQs:**
+#### 2. Exam-style MCQs
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
+python3 -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
 ```
 
-**7-Day Revision Plan:**
+#### 3. 7-Day Revision Plan
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode plan
+python3 -m src.main --pdf path/to/notes.pdf --mode plan
 ```
 
-### 4. Running Tests
+---
+
+### Advanced CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--output <filepath>` | Export results to a file. Format is inferred from extension (`.md` or `.json`). |
+| `--save-index <directory>` | Save the computed FAISS index and chunk metadata to disk. |
+| `--load-index <directory>` | Load a pre-computed FAISS index, bypassing PDF extraction & embedding. |
+| `--verbose` | Enable detailed debug logs (including API retry and retrieval details). |
+
+#### Examples:
+
+**Exporting MCQs to Markdown:**
 ```bash
-export PYTHONPATH=$PYTHONPATH:.
-pytest
+python3 -m src.main --pdf notes.pdf --mode mcq --num-mcq 5 --output mcqs.md
 ```
+
+**Exporting Summary to JSON:**
+```bash
+python3 -m src.main --pdf notes.pdf --mode summary --output summary.json
+```
+
+**Building & Saving Index Once:**
+```bash
+python3 -m src.main --pdf notes.pdf --mode summary --save-index ./indexes/thermo_idx
+```
+
+**Reusing Existing Index (Zero PDF Re-parse / Zero Re-embedding):**
+```bash
+python3 -m src.main --load-index ./indexes/thermo_idx --mode mcq --num-mcq 10 --output mcqs.md
+```
+
+---
+
+## Testing
+
+Run the full pytest suite:
+```bash
+python3 -m pytest
+```
+
+Run test suite with verbose output:
+```bash
+python3 -m pytest -v
+```
+
+---
 
 ## Notes on AI Usage
-This project was developed with AI assistance (Jules), following a technical-first approach to architecture and logic. For a detailed breakdown of AI vs. human-guided components, see [AI.md](./AI.md).
+For disclosures and architectural rationale regarding AI-assisted development, see [AI.md](./AI.md).

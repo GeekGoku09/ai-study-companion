@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from src.mcq_generator import MCQGenerator
 from src.llm import LLMService
 from src.schemas import MCQList, MCQ, DocumentChunk
@@ -29,6 +29,12 @@ class TestMCQGenerator(unittest.TestCase):
         self.assertIsInstance(result, MCQList)
         self.assertEqual(len(result.questions), 1)
         self.assertEqual(result.questions[0].correct_answer, "4")
+
+    def test_generate_mcqs_empty_chunks(self):
+        mock_llm = MagicMock(spec=LLMService)
+        generator = MCQGenerator(mock_llm)
+        result = generator.generate_mcqs([])
+        self.assertEqual(len(result.questions), 0)
 
 if __name__ == '__main__':
     unittest.main()

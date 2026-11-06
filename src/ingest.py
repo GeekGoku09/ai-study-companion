@@ -2,6 +2,7 @@ import os
 import re
 from typing import List
 from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 from .schemas import DocumentChunk
 import tiktoken
 
@@ -10,11 +11,28 @@ def extract_text_from_pdf(pdf_path: str) -> List[DocumentChunk]:
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"PDF file not found at {pdf_path}")
 
-    reader = PdfReader(pdf_path)
+    if os.path.isdir(pdf_path):
+        raise IsADirectoryError(f"Provided path is a directory, not a PDF file: {pdf_path}")
+
+    try:
+        reader = PdfReader(pdf_path)
+    except PdfReadError as e:
+        raise ValueError(f"Failed to read PDF file at {pdf_path}: {e}") from e
+
+    if reader.is_encrypted:
+        try:
+            reader.decrypt("")
+        except Exception as e:
+            raise ValueError(f"PDF at {pdf_path} is encrypted and could not be decrypted: {e}") from e
+
     chunks = []
     
     for page_num, page in enumerate(reader.pages):
-        text = page.extract_text()
+        try:
+            text = page.extract_text()
+        except Exception:
+            text = None
+
         if not text:
             continue
         
@@ -42,11 +60,11 @@ def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> Lis
     Refines chunks to ensure they are semantically coherent and within token limits.
     Groups small consecutive paragraphs from the same page if they fit in max_tokens.
     """
-    encoding = tiktoken.get_encoding("cl100k_base")
-    refined_chunks = []
-    
     if not chunks:
         return []
+
+    encoding = tiktoken.get_encoding("cl100k_base")
+    refined_chunks = []
 
     # Optimization (⚡ Bolt):
     # Maintain running token count and buffer paragraph contents in a list.
@@ -63,7 +81,7 @@ def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> Lis
         
         # If adding the next paragraph exceeds max_tokens or we are on a new page,
         # save the current chunk and start a new one
-        if (current_tokens + tokens_new > max_tokens) or (chunk.metadata["page"] != current_metadata["page"]):
+        if (current_tokens + tokens_new > max_tokens) or (chunk.metadata.get("page") != current_metadata.get("page")):
             if current_parts:
                 refined_chunks.append(DocumentChunk(
                     content="\n\n".join(current_parts).strip(),

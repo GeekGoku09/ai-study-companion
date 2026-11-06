@@ -1,20 +1,26 @@
 import os
-import json
-from typing import Type, TypeVar, List, Tuple
+from typing import Type, TypeVar, List, Tuple, Optional
 from pydantic import BaseModel
 from openai import OpenAI
-from .schemas import DocumentChunk
 
 T = TypeVar("T", bound=BaseModel)
 
+DEFAULT_MODEL = "gpt-4o-mini"
+
 class LLMService:
-    def __init__(self, api_key: str = None, model: str = "gpt-4o-mini"):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = DEFAULT_MODEL,
+        timeout: Optional[float] = None
+    ):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OpenAI API key is required for LLMService")
         
-        self.client = OpenAI(api_key=self.api_key)
         self.model = model
+        self.timeout = timeout
+        self.client = OpenAI(api_key=self.api_key, timeout=self.timeout)
 
     def call_structured(self, system_prompt: str, user_prompt: str, response_model: Type[T]) -> T:
         """Calls the LLM and returns a structured response matching the Pydantic model."""
@@ -26,7 +32,10 @@ class LLMService:
             ],
             response_format=response_model,
         )
-        return response.choices[0].message.parsed
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            raise ValueError("Failed to parse structured response from LLM")
+        return parsed
 
     def get_summarization_prompt(self, context: str) -> Tuple[str, str]:
         system = "You are a technical academic assistant. Summarize the provided engineering document chunks into topic-wise sections. Focus on key concepts, formulas, and definitions. Ground your summary strictly in the provided context."

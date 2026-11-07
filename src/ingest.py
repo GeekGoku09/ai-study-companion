@@ -1,20 +1,36 @@
 import os
 import re
-from typing import List
-from pypdf import PdfReader
-from .schemas import DocumentChunk
-import tiktoken
 
-def extract_text_from_pdf(pdf_path: str) -> List[DocumentChunk]:
+import tiktoken
+from pypdf import PdfReader
+from pypdf.errors import PyPdfError
+
+from .schemas import DocumentChunk
+
+
+def extract_text_from_pdf(pdf_path: str) -> list[DocumentChunk]:
     """Extracts text from a PDF and returns a list of DocumentChunks."""
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"PDF file not found at {pdf_path}")
+    if not os.path.isfile(pdf_path):
+        raise ValueError(f"Path is not a regular file: {pdf_path}")
 
-    reader = PdfReader(pdf_path)
+    try:
+        reader = PdfReader(pdf_path)
+    except Exception as e:
+        raise ValueError(f"Failed to read PDF file '{pdf_path}': {e}") from e
+
+    if len(reader.pages) == 0:
+        raise ValueError(f"PDF file '{pdf_path}' has no pages.")
+
     chunks = []
     
     for page_num, page in enumerate(reader.pages):
-        text = page.extract_text()
+        try:
+            text = page.extract_text()
+        except (PyPdfError, TypeError, ValueError):
+            text = None
+
         if not text:
             continue
         
@@ -35,18 +51,25 @@ def extract_text_from_pdf(pdf_path: str) -> List[DocumentChunk]:
                 }
             ))
     
+    if not chunks:
+        raise ValueError(
+            f"No extractable text or content found in PDF '{pdf_path}'. "
+            "Please ensure the PDF contains text rather than scanned images."
+        )
+
     return chunks
 
-def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> List[DocumentChunk]:
+
+def semantic_chunking(chunks: list[DocumentChunk], max_tokens: int = 500) -> list[DocumentChunk]:
     """
     Refines chunks to ensure they are semantically coherent and within token limits.
     Groups small consecutive paragraphs from the same page if they fit in max_tokens.
     """
-    encoding = tiktoken.get_encoding("cl100k_base")
-    refined_chunks = []
-    
     if not chunks:
         return []
+
+    encoding = tiktoken.get_encoding("cl100k_base")
+    refined_chunks = []
 
     # Optimization (⚡ Bolt):
     # Maintain running token count and buffer paragraph contents in a list.
@@ -54,7 +77,7 @@ def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> Lis
     # as the chunk grew, causing O(N^2) tokenization overhead and repeated string allocations.
     # Tracking current_tokens incrementally and joining parts on flush reduces tokenization from O(N^2)
     # to O(N), yielding an ~4.5x speedup.
-    current_parts: List[str] = []
+    current_parts: list[str] = []
     current_tokens: int = 0
     current_metadata = chunks[0].metadata
     
@@ -63,7 +86,7 @@ def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> Lis
         
         # If adding the next paragraph exceeds max_tokens or we are on a new page,
         # save the current chunk and start a new one
-        if (current_tokens + tokens_new > max_tokens) or (chunk.metadata["page"] != current_metadata["page"]):
+        if (current_tokens + tokens_new > max_tokens) or (chunk.metadata.get("page") != current_metadata.get("page")):
             if current_parts:
                 refined_chunks.append(DocumentChunk(
                     content="\n\n".join(current_parts).strip(),
@@ -85,7 +108,8 @@ def semantic_chunking(chunks: List[DocumentChunk], max_tokens: int = 500) -> Lis
         
     return refined_chunks
 
-def ingest_pdf(pdf_path: str) -> List[DocumentChunk]:
+
+def ingest_pdf(pdf_path: str) -> list[DocumentChunk]:
     """High-level function to ingest a PDF and return semantically chunked content."""
     initial_chunks = extract_text_from_pdf(pdf_path)
     final_chunks = semantic_chunking(initial_chunks)

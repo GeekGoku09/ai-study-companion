@@ -16,7 +16,7 @@ Engineering students often face "information overload" when reviewing dense text
 A modular RAG pipeline that:
 1. **Ingests** PDFs and performs semantic chunking.
 2. **Retrieves** relevant context using vector embeddings (FAISS).
-3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates.
+3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates and Pydantic response models.
 
 ## System Architecture
 
@@ -35,19 +35,8 @@ graph TD
     H & I & J --> K[LLM Service: llm.py]
     K --> L[OpenAI GPT-4o-mini]
     E -.->|Retrieve Context| H & I & J
-    L --> M[Structured Output]
+    L --> M[Structured Output: Markdown / JSON]
 ```
-
-## Ideal End State
-A production-ready CLI tool where a student can upload their semester notes and receive a comprehensive, grounded study kit in seconds, significantly reducing revision time and improving exam performance.
-
-## Hackathon Scope & Execution
-- **Core Focus**: Robust RAG implementation with semantic chunking and structured Pydantic outputs.
-- **Modules**:
-    - `ingest.py`: PDF parsing and intelligent grouping of paragraphs.
-    - `retriever.py`: Vector search using FAISS and OpenAI embeddings.
-    - `llm.py`: Centralized chat completion with structured parsing.
-- **Testing**: Unit tests for structural integrity of the pipeline.
 
 ## How to Run / Demo
 
@@ -57,33 +46,63 @@ pip install -r requirements.txt
 ```
 
 ### 2. Set Environment Variables
-Create a `.env` file or export your OpenAI API key:
+Copy `.env.example` to `.env` or export your OpenAI API key:
+```bash
+cp .env.example .env
+# Edit .env and set your OPENAI_API_KEY
+```
+Or export directly:
 ```bash
 export OPENAI_API_KEY="your-api-key-here"
 ```
 
 ### 3. Usage
-Run the CLI for different modes:
+Run the CLI for different study modes:
 
 **Topic-wise Summary:**
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode summary
+python3 -m src.main --pdf path/to/notes.pdf --mode summary
 ```
 
 **Exam-style MCQs:**
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
+python3 -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
 ```
 
 **7-Day Revision Plan:**
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode plan
+python3 -m src.main --pdf path/to/notes.pdf --mode plan
 ```
 
-### 4. Running Tests
+**Custom Output File and Formats:**
+You can save the output directly to a file (`--output`) and select the format (`--format markdown` or `--format json`):
 ```bash
-export PYTHONPATH=$PYTHONPATH:.
-pytest
+python3 -m src.main --pdf path/to/notes.pdf --mode summary --format json --output output/summary.json
+```
+
+**Custom Model & Timeout:**
+```bash
+python3 -m src.main --pdf path/to/notes.pdf --mode mcq --model gpt-4o --timeout 90.0
+```
+
+### CLI Options Reference
+- `--pdf <path>`: (Required) Path to the engineering PDF file.
+- `--mode <summary|mcq|plan>`: (Required) Operation mode.
+- `--num-mcq <int>`: Number of MCQs to generate (default: `5`).
+- `--output <path>`: Optional file path to save the generated output.
+- `--format <markdown|json>`: Output format (default: `markdown`).
+- `--model <name>`: OpenAI model to use (default: `gpt-4o-mini`).
+- `--timeout <float>`: OpenAI API request timeout in seconds (default: `60.0`).
+
+### 4. Running Tests & Linting
+Run the test suite:
+```bash
+python3 -m pytest
+```
+
+Run static code analysis:
+```bash
+ruff check .
 ```
 
 ## Notes on AI Usage

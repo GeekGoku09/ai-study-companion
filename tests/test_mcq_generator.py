@@ -1,8 +1,10 @@
 import unittest
-from unittest.mock import MagicMock, patch
-from src.mcq_generator import MCQGenerator
+from unittest.mock import MagicMock
+
 from src.llm import LLMService
-from src.schemas import MCQList, MCQ, DocumentChunk
+from src.mcq_generator import MCQGenerator
+from src.schemas import MCQ, DocumentChunk, MCQList
+
 
 class TestMCQGenerator(unittest.TestCase):
     def test_generate_mcqs_schema(self):

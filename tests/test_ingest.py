@@ -1,7 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from src.ingest import extract_text_from_pdf, semantic_chunking, ingest_pdf
+from src.ingest import extract_text_from_pdf, semantic_chunking
 from src.schemas import DocumentChunk
+
 
 class TestIngest(unittest.TestCase):
     @patch('src.ingest.PdfReader')
@@ -18,6 +19,7 @@ class TestIngest(unittest.TestCase):
         )
         
         mock_reader_instance = mock_pdf_reader.return_value
+        mock_reader_instance.is_encrypted = False
         mock_reader_instance.pages = [mock_page]
         
         chunks = extract_text_from_pdf("dummy.pdf")
@@ -26,9 +28,24 @@ class TestIngest(unittest.TestCase):
         self.assertIn("long test paragraph", chunks[0].content)
         self.assertIn("another long paragraph", chunks[1].content)
 
+    def test_extract_text_file_not_found(self):
+        with self.assertRaises(FileNotFoundError):
+            extract_text_from_pdf("non_existent_file_12345.pdf")
+
+    @patch('src.ingest.PdfReader')
+    @patch('os.path.exists')
+    def test_extract_text_empty_pdf(self, mock_exists, mock_pdf_reader):
+        mock_exists.return_value = True
+        mock_reader_instance = mock_pdf_reader.return_value
+        mock_reader_instance.is_encrypted = False
+        mock_reader_instance.pages = []
+
+        with self.assertRaises(ValueError):
+            extract_text_from_pdf("empty.pdf")
+
     def test_semantic_chunking(self):
         chunks = [
-            DocumentChunk(content="Para 1" * 50, metadata={"page": 1}), # approx 100-200 tokens
+            DocumentChunk(content="Para 1" * 50, metadata={"page": 1}),
             DocumentChunk(content="Para 2" * 50, metadata={"page": 1}),
             DocumentChunk(content="Para 3" * 50, metadata={"page": 2}),
         ]
@@ -45,6 +62,10 @@ class TestIngest(unittest.TestCase):
         self.assertEqual(len(refined_large), 2)
         self.assertIn("Para 1", refined_large[0].content)
         self.assertIn("Para 2", refined_large[0].content)
+
+    def test_semantic_chunking_empty(self):
+        self.assertEqual(semantic_chunking([]), [])
+
 
 if __name__ == '__main__':
     unittest.main()

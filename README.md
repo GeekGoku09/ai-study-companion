@@ -1,24 +1,22 @@
 # AI Study Companion RAG System
 
-An intelligent Retrieval-Augmented Generation (RAG) system designed to transform engineering PDFs into actionable study materials, including topic-wise summaries, exam-style MCQs, and structured revision plans.
+An intelligent Retrieval-Augmented Generation (RAG) system designed to transform engineering textbooks and lecture notes (PDFs) into actionable, grounded study materials—including topic-wise summaries, exam-style Multiple Choice Questions (MCQs), and structured 7-day revision plans.
 
-## Problem
-Engineering students often face "information overload" when reviewing dense textbooks and lecture notes. Manually creating summaries and practice questions is time-consuming, and general-purpose AI often "hallucinates" details not present in the specific course material.
+---
 
-## Constraints & Assumptions
-- **No Jupyter Notebooks**: Logic is strictly contained in modular `.py` files for production readiness.
-- **Code-First Evaluation**: Focus on clean architecture, readable logic, and testability.
-- **Privacy & Security**: No secrets committed; API keys managed via environment variables.
-- **Data Source**: Assumes high-quality, text-searchable engineering PDFs.
-- **Grounding**: All generated content must be strictly grounded in the uploaded documents to ensure technical accuracy.
+## Key Features
+- **Semantic Chunking**: Extracts PDF content, filters noise, and groups paragraphs up to configurable token limits while respecting page boundaries.
+- **Optimized FAISS Vector Retrieval**: Embeds chunks using OpenAI's `text-embedding-3-small` with batched requests and performs similarity search via FAISS.
+- **Centralized LLM Service**: Leverages OpenAI structured outputs (`beta.chat.completions.parse`) with strict Pydantic schemas, preventing hallucinated schemas and schema drift.
+- **Multiple Output Modes**:
+  - `summary`: Topic-wise conceptual breakdown highlighting key definitions, principles, and formulas.
+  - `mcq`: Exam-style multiple choice questions with 4 choices, verified correct answer, and detailed explanations.
+  - `plan`: 7-day time-boxed revision plan with actionable daily activities.
+- **Flexible Export**: Output in either human-readable **Markdown** or structured **JSON**, directly to console (`stdout`) or saved to an output file.
 
-## Proposed Solution
-A modular RAG pipeline that:
-1. **Ingests** PDFs and performs semantic chunking.
-2. **Retrieves** relevant context using vector embeddings (FAISS).
-3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates.
+---
 
-## System Architecture
+## Architecture Overview
 
 ```mermaid
 graph TD
@@ -35,56 +33,94 @@ graph TD
     H & I & J --> K[LLM Service: llm.py]
     K --> L[OpenAI GPT-4o-mini]
     E -.->|Retrieve Context| H & I & J
-    L --> M[Structured Output]
+    L --> M[Structured Output: Markdown or JSON]
 ```
 
-## Ideal End State
-A production-ready CLI tool where a student can upload their semester notes and receive a comprehensive, grounded study kit in seconds, significantly reducing revision time and improving exam performance.
+### Module Breakdown
+- `src/ingest.py`: PDF parsing (`pypdf`), encryption checks, empty page detection, and semantic chunking using `tiktoken`.
+- `src/retriever.py`: FAISS index management, batched OpenAI embeddings, and top-$k$ nearest-neighbor retrieval.
+- `src/llm.py`: Centralized LLM client handling structured generation, timeouts, error boundaries, and prompts.
+- `src/schemas.py`: Pydantic data models with strict field validation constraints.
+- `src/summarizer.py`: Topic-wise summary generator.
+- `src/mcq_generator.py`: Exam-style MCQ generator.
+- `src/planner.py`: 7-day study planner.
+- `src/utils.py`: Token counting (`tiktoken`), Markdown formatting, and JSON serialization.
+- `src/main.py`: Command-line interface orchestration and output handling.
 
-## Hackathon Scope & Execution
-- **Core Focus**: Robust RAG implementation with semantic chunking and structured Pydantic outputs.
-- **Modules**:
-    - `ingest.py`: PDF parsing and intelligent grouping of paragraphs.
-    - `retriever.py`: Vector search using FAISS and OpenAI embeddings.
-    - `llm.py`: Centralized chat completion with structured parsing.
-- **Testing**: Unit tests for structural integrity of the pipeline.
+---
 
-## How to Run / Demo
+## Setup & Installation
 
-### 1. Installation
+### 1. Requirements
+- Python 3.10+ (tested with Python 3.12)
+- OpenAI API Key
+
+### 2. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Set Environment Variables
-Create a `.env` file or export your OpenAI API key:
+### 3. Configure Environment Variables
+Copy `.env.example` to `.env` and provide your OpenAI API key:
 ```bash
+cp .env.example .env
 export OPENAI_API_KEY="your-api-key-here"
 ```
 
-### 3. Usage
-Run the CLI for different modes:
+---
+
+## CLI Usage
+
+### Basic Commands
 
 **Topic-wise Summary:**
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode summary
+python3 -m src.main --pdf path/to/notes.pdf --mode summary
 ```
 
 **Exam-style MCQs:**
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
+python3 -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
 ```
 
 **7-Day Revision Plan:**
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode plan
+python3 -m src.main --pdf path/to/notes.pdf --mode plan
 ```
 
-### 4. Running Tests
+### Output Options (Markdown / JSON & File Export)
+
+**Export Summary to Markdown File:**
 ```bash
-export PYTHONPATH=$PYTHONPATH:.
-pytest
+python3 -m src.main --pdf notes.pdf --mode summary --output output/summary.md --format markdown
 ```
+
+**Export MCQs to JSON File:**
+```bash
+python3 -m src.main --pdf notes.pdf --mode mcq --num-mcq 5 --output output/mcqs.json --format json
+```
+
+### Advanced Flags
+- `--model <name>`: Specify OpenAI model (default: `gpt-4o-mini`).
+- `--timeout <seconds>`: Set request timeout in seconds (default: `60.0`).
+- `--format <markdown|json>`: Choose output format (default: `markdown`).
+- `--output <path>`: Write generated material to a file instead of only stdout.
+
+---
+
+## Testing & Quality Assurance
+
+### Run Unit and Integration Tests
+```bash
+python3 -m pytest
+```
+
+### Code Formatting & Linting
+```bash
+ruff check .
+```
+
+---
 
 ## Notes on AI Usage
-This project was developed with AI assistance (Jules), following a technical-first approach to architecture and logic. For a detailed breakdown of AI vs. human-guided components, see [AI.md](./AI.md).
+This project was developed with AI assistance (Jules), following a technical-first approach to architecture and logic. For details, see [AI.md](./AI.md).

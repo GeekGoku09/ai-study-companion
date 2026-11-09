@@ -2,7 +2,10 @@ from typing import List
 from .schemas import DocumentChunk, SummaryResponse
 from .llm import LLMService
 
+
 class Summarizer:
+    """Orchestrates topic-wise summarization from document chunks."""
+
     def __init__(self, llm_service: LLMService):
         self.llm_service = llm_service
 
@@ -11,7 +14,12 @@ class Summarizer:
         if not chunks:
             return SummaryResponse(topics=[])
 
-        context = "\n\n".join([f"Source: {c.metadata.get('page')}\nContent: {c.content}" for c in chunks])
+        context_parts = []
+        for c in chunks:
+            page = c.metadata.get("page", "Unknown")
+            context_parts.append(f"[Page {page}]\n{c.content}")
+        context = "\n\n".join(context_parts)
+
         system_prompt, user_prompt = self.llm_service.get_summarization_prompt(context)
         
         summary_response = self.llm_service.call_structured(

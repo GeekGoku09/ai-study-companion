@@ -2,13 +2,16 @@ from typing import List
 from .schemas import DocumentChunk, MCQList
 from .llm import LLMService
 
+
 class MCQGenerator:
+    """Generates exam-style MCQs from retrieved document chunks."""
+
     def __init__(self, llm_service: LLMService):
         self.llm_service = llm_service
 
     def generate_mcqs(self, chunks: List[DocumentChunk], num_questions: int = 5) -> MCQList:
         """Generates MCQs from a list of document chunks."""
-        if not chunks:
+        if not chunks or num_questions <= 0:
             return MCQList(questions=[])
 
         context = "\n\n".join([f"Content: {c.content}" for c in chunks])

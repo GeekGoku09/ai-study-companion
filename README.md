@@ -16,7 +16,7 @@ Engineering students often face "information overload" when reviewing dense text
 A modular RAG pipeline that:
 1. **Ingests** PDFs and performs semantic chunking.
 2. **Retrieves** relevant context using vector embeddings (FAISS).
-3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates.
+3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates and structured Pydantic models.
 
 ## System Architecture
 
@@ -33,21 +33,10 @@ graph TD
     G -->|plan| J[Revision Planner: planner.py]
     
     H & I & J --> K[LLM Service: llm.py]
-    K --> L[OpenAI GPT-4o-mini]
+    K --> L[OpenAI GPT-4o-mini / GPT-4o]
     E -.->|Retrieve Context| H & I & J
-    L --> M[Structured Output]
+    L --> M[Structured Output: Markdown or JSON]
 ```
-
-## Ideal End State
-A production-ready CLI tool where a student can upload their semester notes and receive a comprehensive, grounded study kit in seconds, significantly reducing revision time and improving exam performance.
-
-## Hackathon Scope & Execution
-- **Core Focus**: Robust RAG implementation with semantic chunking and structured Pydantic outputs.
-- **Modules**:
-    - `ingest.py`: PDF parsing and intelligent grouping of paragraphs.
-    - `retriever.py`: Vector search using FAISS and OpenAI embeddings.
-    - `llm.py`: Centralized chat completion with structured parsing.
-- **Testing**: Unit tests for structural integrity of the pipeline.
 
 ## How to Run / Demo
 
@@ -57,34 +46,65 @@ pip install -r requirements.txt
 ```
 
 ### 2. Set Environment Variables
-Create a `.env` file or export your OpenAI API key:
+Copy `.env.example` to `.env` and set your OpenAI API key:
+```bash
+cp .env.example .env
+# Edit .env and set OPENAI_API_KEY
+```
+Or export it directly:
 ```bash
 export OPENAI_API_KEY="your-api-key-here"
 ```
 
-### 3. Usage
-Run the CLI for different modes:
+### 3. Usage & CLI Options
+Run the CLI for different study modes:
 
-**Topic-wise Summary:**
+#### Topic-wise Summary
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode summary
+python3 -m src.main --pdf path/to/notes.pdf --mode summary
 ```
 
-**Exam-style MCQs:**
+#### Exam-style MCQs
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
+python3 -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
 ```
 
-**7-Day Revision Plan:**
+#### 7-Day Revision Plan
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode plan
+python3 -m src.main --pdf path/to/notes.pdf --mode plan
 ```
 
-### 4. Running Tests
+#### Advanced Options: JSON Output, File Export, Custom Model & Timeout
 ```bash
-export PYTHONPATH=$PYTHONPATH:.
-pytest
+# Export summary to JSON file
+python3 -m src.main --pdf path/to/notes.pdf --mode summary --format json --output output/summary.json
+
+# Export MCQs to Markdown with custom model and timeout
+python3 -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 5 --format markdown --output output/mcqs.md --model gpt-4o --timeout 45.0
+```
+
+#### CLI Parameters
+| Flag | Description | Default | Choices |
+| :--- | :--- | :--- | :--- |
+| `--pdf` | **Required.** Path to engineering PDF file. | None | File path |
+| `--mode` | **Required.** Study companion operation mode. | None | `summary`, `mcq`, `plan` |
+| `--num-mcq` | Number of MCQs to generate (for `mcq` mode). | `5` | Integer |
+| `--format` | Output format. | `markdown` | `markdown`, `json` |
+| `--output` | Destination file path to save output. | `None` (stdout only) | File path |
+| `--model` | OpenAI chat completion model name. | `gpt-4o-mini` | String |
+| `--timeout`| Timeout in seconds for API network requests. | `None` | Float |
+
+### 4. Running Tests & Quality Checks
+
+Run test suite:
+```bash
+python3 -m pytest
+```
+
+Run static analysis & linting:
+```bash
+ruff check .
 ```
 
 ## Notes on AI Usage
-This project was developed with AI assistance (Jules), following a technical-first approach to architecture and logic. For a detailed breakdown of AI vs. human-guided components, see [AI.md](./AI.md).
+This project was developed with AI assistance, following a technical-first approach to architecture and logic. For a detailed breakdown of AI vs. human-guided components, see [AI.md](./AI.md).

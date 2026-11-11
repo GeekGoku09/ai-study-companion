@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from src.mcq_generator import MCQGenerator
 from src.llm import LLMService
 from src.schemas import MCQList, MCQ, DocumentChunk

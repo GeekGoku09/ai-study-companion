@@ -1,24 +1,20 @@
 # AI Study Companion RAG System
 
-An intelligent Retrieval-Augmented Generation (RAG) system designed to transform engineering PDFs into actionable study materials, including topic-wise summaries, exam-style MCQs, and structured revision plans.
+An intelligent, production-ready Retrieval-Augmented Generation (RAG) system engineered to transform complex engineering PDFs into structured, actionable study materials: topic-wise technical summaries, exam-style practice MCQs, and balanced 7-day revision plans.
 
-## Problem
-Engineering students often face "information overload" when reviewing dense textbooks and lecture notes. Manually creating summaries and practice questions is time-consuming, and general-purpose AI often "hallucinates" details not present in the specific course material.
+---
 
-## Constraints & Assumptions
-- **No Jupyter Notebooks**: Logic is strictly contained in modular `.py` files for production readiness.
-- **Code-First Evaluation**: Focus on clean architecture, readable logic, and testability.
-- **Privacy & Security**: No secrets committed; API keys managed via environment variables.
-- **Data Source**: Assumes high-quality, text-searchable engineering PDFs.
-- **Grounding**: All generated content must be strictly grounded in the uploaded documents to ensure technical accuracy.
+## Key Features
 
-## Proposed Solution
-A modular RAG pipeline that:
-1. **Ingests** PDFs and performs semantic chunking.
-2. **Retrieves** relevant context using vector embeddings (FAISS).
-3. **Generates** structured study aids (Summaries, MCQs, Plans) using a centralized LLM interface with explicit prompt templates.
+- **Semantic Chunking**: Context-aware document partitioning that preserves technical continuity without splitting interrelated formulas or theorems across arbitrary boundaries.
+- **Token Efficiency (⚡ Bolt)**: Single-pass token counting and chunk buffering to eliminate $O(N^2)$ re-encoding overhead.
+- **Fast Dense Vector Search**: High-performance semantic similarity retrieval powered by FAISS and OpenAI's `text-embedding-3-small` with automatic request batching.
+- **Strict Pydantic Grounding**: Strict JSON schema enforcement ensuring guaranteed type safety, 4-option validation for MCQs, and structured daily revision scheduling.
+- **Multi-Format Export**: Generates both clean GitHub-flavored Markdown and machine-readable JSON, with CLI options for direct file output.
 
-## System Architecture
+---
+
+## Architecture
 
 ```mermaid
 graph TD
@@ -33,58 +29,81 @@ graph TD
     G -->|plan| J[Revision Planner: planner.py]
     
     H & I & J --> K[LLM Service: llm.py]
-    K --> L[OpenAI GPT-4o-mini]
-    E -.->|Retrieve Context| H & I & J
-    L --> M[Structured Output]
+    K --> L[OpenAI Structured Completion]
+    E -.->|Retrieve Grounded Context| H & I & J
+    L --> M[Export: Markdown / JSON]
 ```
 
-## Ideal End State
-A production-ready CLI tool where a student can upload their semester notes and receive a comprehensive, grounded study kit in seconds, significantly reducing revision time and improving exam performance.
+---
 
-## Hackathon Scope & Execution
-- **Core Focus**: Robust RAG implementation with semantic chunking and structured Pydantic outputs.
-- **Modules**:
-    - `ingest.py`: PDF parsing and intelligent grouping of paragraphs.
-    - `retriever.py`: Vector search using FAISS and OpenAI embeddings.
-    - `llm.py`: Centralized chat completion with structured parsing.
-- **Testing**: Unit tests for structural integrity of the pipeline.
-
-## How to Run / Demo
+## Quickstart
 
 ### 1. Installation
+
+Ensure you are using Python 3.10+ (tested on Python 3.12):
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Set Environment Variables
-Create a `.env` file or export your OpenAI API key:
+### 2. Configure Environment
+
+Copy the example environment configuration and supply your OpenAI API key:
+
 ```bash
+cp .env.example .env
 export OPENAI_API_KEY="your-api-key-here"
 ```
 
-### 3. Usage
-Run the CLI for different modes:
+---
 
-**Topic-wise Summary:**
+## CLI Usage
+
+Run the tool using `python3 -m src.main` with desired mode and flags:
+
+### Topic-Wise Summary
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode summary
+python3 -m src.main --pdf path/to/notes.pdf --mode summary --format markdown
 ```
 
-**Exam-style MCQs:**
+### Exam-Style MCQs
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10
+python3 -m src.main --pdf path/to/notes.pdf --mode mcq --num-mcq 10 --format markdown --output practice_questions.md
 ```
 
-**7-Day Revision Plan:**
+### 7-Day Revision Plan
 ```bash
-python -m src.main --pdf path/to/notes.pdf --mode plan
+python3 -m src.main --pdf path/to/notes.pdf --mode plan --format json --output revision_schedule.json
 ```
 
-### 4. Running Tests
+### CLI Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--pdf` | string | *required* | Path to the source engineering PDF file |
+| `--mode` | string | *required* | Operation mode: `summary`, `mcq`, or `plan` |
+| `--num-mcq` | int | `5` | Number of practice questions (for `mcq` mode) |
+| `--format` | string | `markdown` | Output format: `markdown` or `json` |
+| `--output` | string | `None` | Optional path to write output to disk |
+| `--model` | string | `gpt-4o-mini` | OpenAI chat completion model name |
+| `--timeout` | float | `60.0` | API request timeout in seconds |
+
+---
+
+## Testing & Quality Assurance
+
+Run the test suite via pytest:
 ```bash
-export PYTHONPATH=$PYTHONPATH:.
-pytest
+python3 -m pytest
 ```
 
-## Notes on AI Usage
-This project was developed with AI assistance (Jules), following a technical-first approach to architecture and logic. For a detailed breakdown of AI vs. human-guided components, see [AI.md](./AI.md).
+Check code quality and linting:
+```bash
+ruff check .
+```
+
+---
+
+## AI Usage Disclosure
+
+See [AI.md](./AI.md) for details on human design versus AI-assisted code generation.
